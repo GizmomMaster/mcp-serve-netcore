@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <UserSecretsId>central-wiki-mcp-server</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ModelContextProtocol" />
+    <PackageReference Include="ModelContextProtocol.AspNetCore" />
+    <PackageReference Include="Asp.Versioning.Http" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
+    <PackageReference Include="FluentValidation" />
+    <PackageReference Include="FluentValidation.DependencyInjectionExtensions" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\CentralWikiMcp.Domain\CentralWikiMcp.Domain.csproj" />
+    <ProjectReference Include="..\CentralWikiMcp.Infrastructure\CentralWikiMcp.Infrastructure.csproj" />
+    <ProjectReference Include="..\stubs\Abdt.Infrastructure.Logging.AspNetCore\Abdt.Infrastructure.Logging.AspNetCore.csproj" />
+    <ProjectReference Include="..\stubs\Abdt.Infrastructure.Monitoring.HealthCheck\Abdt.Infrastructure.Monitoring.HealthCheck.csproj" />
+    <ProjectReference Include="..\stubs\Abdt.Infrastructure.RateLimiting\Abdt.Infrastructure.RateLimiting.csproj" />
+    <ProjectReference Include="..\stubs\Abdt.Infrastructure.Configuration.Vault\Abdt.Infrastructure.Configuration.Vault.csproj" />
+    <ProjectReference Include="..\stubs\Abdt.Infrastructure.Configuration.Validation\Abdt.Infrastructure.Configuration.Validation.csproj" />
+    <ProjectReference Include="..\stubs\Abdt.Infrastructure.OpenTelemetry.Metrics\Abdt.Infrastructure.OpenTelemetry.Metrics.csproj" />
+    <ProjectReference Include="..\stubs\Protoobp.Trace.Bundle\Protoobp.Trace.Bundle.csproj" />
+  </ItemGroup>
+
+</Project>
