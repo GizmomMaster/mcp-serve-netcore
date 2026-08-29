@@ -210,7 +210,7 @@ sliding-window два уровня с fail-open, `/health`, `/health/full`, `/he
 
 ```bash
 dotnet build                                              # сборка решения
-dotnet run --project tests/CentralWikiMcp.UnitTests       # тесты
+dotnet test                                               # тесты
 dotnet ef migrations add <Name> \
   --project src/CentralWikiMcp.Infrastructure \
   --startup-project src/CentralWikiMcp.Infrastructure \
@@ -219,6 +219,11 @@ dotnet ef migrations add <Name> \
 
 Сборка идёт с `TreatWarningsAsErrors` и включёнными анализаторами (NFR-07),
 версии пакетов централизованы в `Directory.Packages.props` (NFR-06).
+
+Тесты работают на Microsoft.Testing.Platform: в .NET 10 SDK это включается
+секцией `test.runner` в `global.json`, а `UseMicrosoftTestingPlatformRunner`
+переключает xunit.v3 с собственного консольного раннера на MTP. Без этой пары
+`dotnet test` не запускает ни одного теста.
 
 ## Что не реализовано
 

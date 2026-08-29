@@ -34,15 +34,12 @@ public sealed class WikiToolService(
     /// <returns>Результаты поиска, доступные субъекту.</returns>
     /// <exception cref="WikiAccessDeniedException">Субъект не имеет доступа к wiki.</exception>
     /// <exception cref="ValidationException">Параметры запроса некорректны.</exception>
-    public async Task<SearchResponseDto> SearchAsync(
+    public Task<SearchResponseDto> SearchAsync(
         string query,
         int? topK,
         WikiSearchFilters? filters,
         CancellationToken cancellationToken)
     {
-        var startedTimestamp = Stopwatch.GetTimestamp();
-        var subject = subjectAccessor.Current;
-
         var parameters = new Dictionary<string, object?>(StringComparer.Ordinal)
         {
             ["query"] = query,
@@ -52,84 +49,45 @@ public sealed class WikiToolService(
             ["updated_after"] = filters?.UpdatedAfter,
         };
 
-        // FR-62: потолок top_k задаёт сервер, а не клиент.
-        var effectiveTopK = Math.Clamp(
-            topK ?? options.DefaultTopK,
-            1,
-            options.MaxTopK);
-
-        var searchQuery = new WikiSearchQuery(
-            Query: query ?? string.Empty,
-            TopK: effectiveTopK,
-            Namespace: filters?.Namespace,
-            Tags: filters?.Tags?.ToArray(),
-            UpdatedAfter: filters?.UpdatedAfter);
-
-        try
-        {
-            await searchValidator
-                .ValidateAndThrowAsync(searchQuery, cancellationToken)
-                .ConfigureAwait(false);
-
-            var allowedNamespaces = accessPolicy.GetAllowedNamespaces(subject);
-
-            // UC-4: отсутствие доступных разделов — отказ, а не пустая выдача без следа в аудите.
-            if (allowedNamespaces is { Count: 0 })
+        return InvokeAuditedAsync(
+            WikiToolNames.Search,
+            parameters,
+            filters?.Namespace,
+            async (call, token) =>
             {
-                await auditor.RecordAsync(
-                    WikiToolNames.Search,
-                    subject,
-                    parameters,
-                    filters?.Namespace,
-                    AuditOutcome.Denied,
-                    startedTimestamp,
-                    cancellationToken).ConfigureAwait(false);
+                // FR-62: потолок top_k задаёт сервер, а не клиент.
+                var searchQuery = new WikiSearchQuery(
+                    Query: query ?? string.Empty,
+                    TopK: Math.Clamp(topK ?? options.DefaultTopK, 1, options.MaxTopK),
+                    Namespace: filters?.Namespace,
+                    Tags: filters?.Tags?.ToArray(),
+                    UpdatedAfter: filters?.UpdatedAfter);
 
-                throw new WikiAccessDeniedException("Субъекту не доступен ни один раздел wiki.");
-            }
+                await searchValidator
+                    .ValidateAndThrowAsync(searchQuery, token)
+                    .ConfigureAwait(false);
 
-            // FR-63: поиск не должен висеть дольше отведённого времени.
-            using var timeoutSource = CancellationTokenSource
-                .CreateLinkedTokenSource(cancellationToken);
-            timeoutSource.CancelAfter(TimeSpan.FromMilliseconds(options.SearchTimeoutMs));
+                var allowedNamespaces = RequireAllowedNamespaces(call.Subject);
 
-            var results = await index
-                .SearchAsync(searchQuery, allowedNamespaces, timeoutSource.Token)
-                .ConfigureAwait(false);
+                // FR-63: поиск не должен висеть дольше отведённого времени.
+                using var timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(token);
+                timeoutSource.CancelAfter(TimeSpan.FromMilliseconds(options.SearchTimeoutMs));
 
-            var response = new SearchResponseDto(
-                [.. results.Select(result => new SearchResultDto(
-                    result.PageId,
-                    result.Path,
-                    result.Title,
-                    result.Snippet,
-                    result.Score,
-                    result.UpdatedAt,
-                    result.Revision))]);
+                var results = await index
+                    .SearchAsync(searchQuery, allowedNamespaces, timeoutSource.Token)
+                    .ConfigureAwait(false);
 
-            await auditor.RecordAsync(
-                WikiToolNames.Search,
-                subject,
-                parameters,
-                filters?.Namespace,
-                AuditOutcome.Allowed,
-                startedTimestamp,
-                cancellationToken).ConfigureAwait(false);
-
-            return response;
-        }
-        catch (Exception ex) when (ex is not WikiAccessDeniedException)
-        {
-            await RecordFailureAsync(
-                WikiToolNames.Search,
-                subject,
-                parameters,
-                filters?.Namespace,
-                startedTimestamp,
-                cancellationToken).ConfigureAwait(false);
-
-            throw;
-        }
+                return new SearchResponseDto(
+                    [.. results.Select(result => new SearchResultDto(
+                        result.PageId,
+                        result.Path,
+                        result.Title,
+                        result.Snippet,
+                        result.Score,
+                        result.UpdatedAt,
+                        result.Revision))]);
+            },
+            cancellationToken);
     }
 
     /// <summary>
@@ -141,87 +99,45 @@ public sealed class WikiToolService(
     /// <returns>Страница или её фрагмент.</returns>
     /// <exception cref="WikiAccessDeniedException">Доступ к разделу страницы запрещён.</exception>
     /// <exception cref="WikiPageNotFoundException">Страница не найдена.</exception>
-    public async Task<PageResponseDto> GetPageAsync(
+    public Task<PageResponseDto> GetPageAsync(
         string pageIdOrPath,
         int? offset,
         CancellationToken cancellationToken)
     {
-        var startedTimestamp = Stopwatch.GetTimestamp();
-        var subject = subjectAccessor.Current;
-
         var parameters = new Dictionary<string, object?>(StringComparer.Ordinal)
         {
             ["pageIdOrPath"] = pageIdOrPath,
             ["offset"] = offset,
         };
 
-        try
-        {
-            if (string.IsNullOrWhiteSpace(pageIdOrPath))
+        return InvokeAuditedAsync(
+            WikiToolNames.GetPage,
+            parameters,
+            pageIdOrPath,
+            async (call, token) =>
             {
-                throw new ValidationException("Не задан идентификатор или путь страницы.");
-            }
+                if (string.IsNullOrWhiteSpace(pageIdOrPath))
+                {
+                    throw new ValidationException("Не задан идентификатор или путь страницы.");
+                }
 
-            var page = await index
-                .GetPageAsync(pageIdOrPath, cancellationToken)
-                .ConfigureAwait(false);
+                var page = await index
+                    .GetPageAsync(pageIdOrPath, token)
+                    .ConfigureAwait(false)
+                    ?? throw new WikiPageNotFoundException($"Страница не найдена: {pageIdOrPath}");
 
-            if (page is null)
-            {
-                await auditor.RecordAsync(
-                    WikiToolNames.GetPage,
-                    subject,
-                    parameters,
-                    pageIdOrPath,
-                    AuditOutcome.NotFound,
-                    startedTimestamp,
-                    cancellationToken).ConfigureAwait(false);
+                call.TargetPath = page.Path;
 
-                throw new WikiPageNotFoundException($"Страница не найдена: {pageIdOrPath}");
-            }
+                // FR-21: права проверяются после нахождения страницы, но до выдачи содержимого.
+                if (!accessPolicy.CanRead(call.Subject, page.Namespace))
+                {
+                    throw new WikiAccessDeniedException(
+                        $"Нет доступа к разделу wiki: {page.Namespace}");
+                }
 
-            // FR-21: права проверяются после нахождения страницы, но до выдачи содержимого.
-            if (!accessPolicy.CanRead(subject, page.Namespace))
-            {
-                await auditor.RecordAsync(
-                    WikiToolNames.GetPage,
-                    subject,
-                    parameters,
-                    page.Path,
-                    AuditOutcome.Denied,
-                    startedTimestamp,
-                    cancellationToken).ConfigureAwait(false);
-
-                throw new WikiAccessDeniedException(
-                    $"Нет доступа к разделу wiki: {page.Namespace}");
-            }
-
-            var response = BuildPageResponse(page, offset ?? 0);
-
-            await auditor.RecordAsync(
-                WikiToolNames.GetPage,
-                subject,
-                parameters,
-                page.Path,
-                AuditOutcome.Allowed,
-                startedTimestamp,
-                cancellationToken).ConfigureAwait(false);
-
-            return response;
-        }
-        catch (Exception ex)
-            when (ex is not WikiAccessDeniedException and not WikiPageNotFoundException)
-        {
-            await RecordFailureAsync(
-                WikiToolNames.GetPage,
-                subject,
-                parameters,
-                pageIdOrPath,
-                startedTimestamp,
-                cancellationToken).ConfigureAwait(false);
-
-            throw;
-        }
+                return BuildPageResponse(page, offset ?? 0);
+            },
+            cancellationToken);
     }
 
     /// <summary>
@@ -233,15 +149,12 @@ public sealed class WikiToolService(
     /// <param name="cancellationToken">Токен отмены.</param>
     /// <returns>Порция метаданных страниц.</returns>
     /// <exception cref="WikiAccessDeniedException">Субъекту не доступен ни один раздел.</exception>
-    public async Task<PageListResponseDto> ListPagesAsync(
+    public Task<PageListResponseDto> ListPagesAsync(
         string? namespaceFilter,
         int? skip,
         int? take,
         CancellationToken cancellationToken)
     {
-        var startedTimestamp = Stopwatch.GetTimestamp();
-        var subject = subjectAccessor.Current;
-
         var parameters = new Dictionary<string, object?>(StringComparer.Ordinal)
         {
             ["namespace"] = namespaceFilter,
@@ -249,74 +162,107 @@ public sealed class WikiToolService(
             ["take"] = take,
         };
 
-        var effectiveSkip = Math.Max(0, skip ?? 0);
-        var effectiveTake = Math.Clamp(take ?? options.MaxListPageSize, 1, options.MaxListPageSize);
+        return InvokeAuditedAsync(
+            WikiToolNames.ListPages,
+            parameters,
+            namespaceFilter,
+            async (call, token) =>
+            {
+                var effectiveSkip = Math.Max(0, skip ?? 0);
+                var effectiveTake = Math.Clamp(
+                    take ?? options.MaxListPageSize,
+                    1,
+                    options.MaxListPageSize);
+
+                var allowedNamespaces = RequireAllowedNamespaces(call.Subject);
+
+                // Запрашиваем на одну запись больше, чтобы узнать о наличии продолжения
+                // без отдельного запроса на подсчёт.
+                var pages = await index.ListPagesAsync(
+                    namespaceFilter,
+                    allowedNamespaces,
+                    effectiveSkip,
+                    effectiveTake + 1,
+                    token).ConfigureAwait(false);
+
+                return new PageListResponseDto(
+                    [.. pages.Take(effectiveTake).Select(page => new PageSummaryDto(
+                        page.PageId,
+                        page.Path,
+                        page.Title,
+                        page.Namespace,
+                        page.Tags,
+                        page.UpdatedAt,
+                        page.Revision))],
+                    effectiveSkip,
+                    effectiveTake,
+                    HasMore: pages.Count > effectiveTake);
+            },
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// Выполняет вызов инструмента, гарантируя запись аудита по любому исходу (FR-53).
+    /// Ветвление «успех / отказ / не найдено / ошибка» живёт только здесь: иначе каждый
+    /// новый инструмент рискует потерять след в аудите на одной из веток.
+    /// </summary>
+    private async Task<TResponse> InvokeAuditedAsync<TResponse>(
+        string tool,
+        IReadOnlyDictionary<string, object?> parameters,
+        string? targetPath,
+        Func<ToolCallContext, CancellationToken, Task<TResponse>> operation,
+        CancellationToken cancellationToken)
+    {
+        var startedTimestamp = Stopwatch.GetTimestamp();
+        var call = new ToolCallContext(subjectAccessor.Current, targetPath);
 
         try
         {
-            var allowedNamespaces = accessPolicy.GetAllowedNamespaces(subject);
+            var response = await operation(call, cancellationToken).ConfigureAwait(false);
 
-            if (allowedNamespaces is { Count: 0 })
-            {
-                await auditor.RecordAsync(
-                    WikiToolNames.ListPages,
-                    subject,
-                    parameters,
-                    namespaceFilter,
-                    AuditOutcome.Denied,
-                    startedTimestamp,
-                    cancellationToken).ConfigureAwait(false);
-
-                throw new WikiAccessDeniedException("Субъекту не доступен ни один раздел wiki.");
-            }
-
-            // Запрашиваем на одну запись больше, чтобы узнать о наличии продолжения
-            // без отдельного запроса на подсчёт.
-            var pages = await index.ListPagesAsync(
-                namespaceFilter,
-                allowedNamespaces,
-                effectiveSkip,
-                effectiveTake + 1,
-                cancellationToken).ConfigureAwait(false);
-
-            var hasMore = pages.Count > effectiveTake;
-
-            var response = new PageListResponseDto(
-                [.. pages.Take(effectiveTake).Select(page => new PageSummaryDto(
-                    page.PageId,
-                    page.Path,
-                    page.Title,
-                    page.Namespace,
-                    page.Tags,
-                    page.UpdatedAt,
-                    page.Revision))],
-                effectiveSkip,
-                effectiveTake,
-                hasMore);
-
-            await auditor.RecordAsync(
-                WikiToolNames.ListPages,
-                subject,
-                parameters,
-                namespaceFilter,
-                AuditOutcome.Allowed,
-                startedTimestamp,
-                cancellationToken).ConfigureAwait(false);
+            await RecordAsync(AuditOutcome.Allowed, cancellationToken).ConfigureAwait(false);
 
             return response;
         }
-        catch (Exception ex) when (ex is not WikiAccessDeniedException)
+        catch (Exception ex)
         {
-            await RecordFailureAsync(
-                WikiToolNames.ListPages,
-                subject,
-                parameters,
-                namespaceFilter,
-                startedTimestamp,
-                cancellationToken).ConfigureAwait(false);
+            // Аудит пишем даже при отмене запроса, иначе следы обрывов теряются.
+            await RecordAsync(Classify(ex), CancellationToken.None).ConfigureAwait(false);
 
             throw;
         }
+
+        Task RecordAsync(AuditOutcome outcome, CancellationToken token) =>
+            auditor.RecordAsync(
+                tool,
+                call.Subject,
+                parameters,
+                call.TargetPath,
+                outcome,
+                startedTimestamp,
+                token);
+    }
+
+    /// <summary>Сопоставляет исключение с итогом для аудита.</summary>
+    private static AuditOutcome Classify(Exception exception) => exception switch
+    {
+        // UC-4, FR-45: отказ по правам обязан отличаться в аудите от сбоя.
+        WikiAccessDeniedException => AuditOutcome.Denied,
+        WikiPageNotFoundException => AuditOutcome.NotFound,
+        _ => AuditOutcome.Error,
+    };
+
+    /// <summary>
+    /// Возвращает доступные субъекту разделы, отказывая, если их нет.
+    /// UC-4: отсутствие доступных разделов — отказ, а не пустая выдача без следа в аудите.
+    /// </summary>
+    private IReadOnlyCollection<string>? RequireAllowedNamespaces(WikiSubject subject)
+    {
+        var allowedNamespaces = accessPolicy.GetAllowedNamespaces(subject);
+
+        return allowedNamespaces is { Count: 0 }
+            ? throw new WikiAccessDeniedException("Субъекту не доступен ни один раздел wiki.")
+            : allowedNamespaces;
     }
 
     /// <summary>
@@ -347,26 +293,5 @@ public sealed class WikiToolService(
             start,
             totalChars,
             truncated ? end : null);
-    }
-
-    private async Task RecordFailureAsync(
-        string tool,
-        WikiSubject subject,
-        IReadOnlyDictionary<string, object?> parameters,
-        string? targetPath,
-        long startedTimestamp,
-        CancellationToken cancellationToken)
-    {
-        // Аудит пишем даже при отмене запроса, иначе следы обрывов теряются.
-        await auditor.RecordAsync(
-            tool,
-            subject,
-            parameters,
-            targetPath,
-            AuditOutcome.Error,
-            startedTimestamp,
-            CancellationToken.None).ConfigureAwait(false);
-
-        cancellationToken.ThrowIfCancellationRequested();
     }
 }

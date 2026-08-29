@@ -3,9 +3,10 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
 
-    <!-- .NET 10 SDK больше не поддерживает VSTest: xunit.v3 работает через Microsoft.Testing.Platform. -->
-    <TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
-    <UseVSTest>false</UseVSTest>
+    <!-- xunit.v3 по умолчанию собирает собственный консольный runner;
+         этот флаг переключает его на Microsoft.Testing.Platform, которого
+         ждёт `dotnet test` в .NET 10 SDK (см. global.json). -->
+    <UseMicrosoftTestingPlatformRunner>true</UseMicrosoftTestingPlatformRunner>
   </PropertyGroup>
 
   <ItemGroup>

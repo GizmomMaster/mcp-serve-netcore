@@ -90,17 +90,13 @@ public sealed class WikiTools(WikiToolService service)
         {
             return await action().ConfigureAwait(false);
         }
-        catch (WikiAccessDeniedException ex)
-        {
-            throw new McpException(ex.Message, ex);
-        }
-        catch (WikiPageNotFoundException ex)
-        {
-            throw new McpException(ex.Message, ex);
-        }
         catch (ValidationException ex)
         {
             throw new McpException($"Некорректные параметры вызова: {ex.Message}", ex);
+        }
+        catch (Exception ex) when (ex is WikiAccessDeniedException or WikiPageNotFoundException)
+        {
+            throw new McpException(ex.Message, ex);
         }
     }
 }
