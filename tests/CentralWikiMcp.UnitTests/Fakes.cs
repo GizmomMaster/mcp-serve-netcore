@@ -84,6 +84,32 @@ internal sealed class FakeWikiIndex : IWikiIndex
     }
 
     /// <inheritdoc />
+    public Task<IReadOnlyList<WikiPageSummary>> ListRecentChangesAsync(
+        IReadOnlyCollection<string>? allowedNamespaces,
+        int take,
+        CancellationToken cancellationToken)
+    {
+        IReadOnlyList<WikiPageSummary> summaries =
+        [
+            .. pages
+                .Where(page => allowedNamespaces is null
+                    || allowedNamespaces.Contains(page.Namespace))
+                .OrderByDescending(page => page.UpdatedAt)
+                .Take(take)
+                .Select(page => new WikiPageSummary(
+                    page.PageId,
+                    page.Path,
+                    page.Title,
+                    page.Namespace,
+                    page.Tags,
+                    page.UpdatedAt,
+                    page.Revision)),
+        ];
+
+        return Task.FromResult(summaries);
+    }
+
+    /// <inheritdoc />
     public Task<int> UpsertAsync(
         IReadOnlyCollection<WikiPage> newPages,
         CancellationToken cancellationToken)

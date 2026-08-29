@@ -49,6 +49,21 @@ public sealed record PageSummaryDto(
     [property: JsonPropertyName("revision")] string Revision);
 
 /// <summary>
+/// Ответ инструмента <c>wiki_get_section</c> (раздел 11.2, Could).
+/// </summary>
+/// <param name="PageId">Идентификатор страницы.</param>
+/// <param name="Path">Логический путь.</param>
+/// <param name="SectionTitle">Заголовок найденной секции, как в исходном тексте.</param>
+/// <param name="ContentMarkdown">Заголовок и содержимое секции в Markdown.</param>
+/// <param name="Revision">Ревизия страницы, к которой относится секция.</param>
+public sealed record SectionResponseDto(
+    [property: JsonPropertyName("pageId")] string PageId,
+    [property: JsonPropertyName("path")] string Path,
+    [property: JsonPropertyName("sectionTitle")] string SectionTitle,
+    [property: JsonPropertyName("contentMarkdown")] string ContentMarkdown,
+    [property: JsonPropertyName("revision")] string Revision);
+
+/// <summary>
 /// Ответ инструмента <c>wiki_list_pages</c>.
 /// </summary>
 /// <param name="Pages">Страницы текущей порции.</param>

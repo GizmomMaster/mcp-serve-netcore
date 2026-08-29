@@ -33,4 +33,8 @@ public sealed class WikiToolOptions
     /// <summary>Максимальное число страниц в одном ответе <c>wiki_list_pages</c>.</summary>
     [Range(1, 1000)]
     public int MaxListPageSize { get; set; } = 100;
+
+    /// <summary>Максимальное число записей в ответе <c>wiki_recent_changes</c> (Could).</summary>
+    [Range(1, 1000)]
+    public int MaxRecentChanges { get; set; } = 50;
 }

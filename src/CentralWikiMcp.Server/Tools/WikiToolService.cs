@@ -202,6 +202,116 @@ public sealed class WikiToolService(
     }
 
     /// <summary>
+    /// Возвращает одну секцию страницы wiki по заголовку (раздел 11.2, Could).
+    /// </summary>
+    /// <param name="pageIdOrPath">Идентификатор или путь страницы.</param>
+    /// <param name="sectionTitle">Заголовок искомой секции.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    /// <returns>Содержимое найденной секции.</returns>
+    /// <exception cref="WikiAccessDeniedException">Доступ к разделу страницы запрещён.</exception>
+    /// <exception cref="WikiPageNotFoundException">Страница не найдена.</exception>
+    /// <exception cref="WikiSectionNotFoundException">Секция с таким заголовком не найдена на странице.</exception>
+    public Task<SectionResponseDto> GetSectionAsync(
+        string pageIdOrPath,
+        string sectionTitle,
+        CancellationToken cancellationToken)
+    {
+        var parameters = new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["pageIdOrPath"] = pageIdOrPath,
+            ["sectionTitle"] = sectionTitle,
+        };
+
+        return InvokeAuditedAsync(
+            WikiToolNames.GetSection,
+            parameters,
+            pageIdOrPath,
+            async (call, token) =>
+            {
+                if (string.IsNullOrWhiteSpace(pageIdOrPath))
+                {
+                    throw new ValidationException("Не задан идентификатор или путь страницы.");
+                }
+
+                if (string.IsNullOrWhiteSpace(sectionTitle))
+                {
+                    throw new ValidationException("Не задан заголовок секции.");
+                }
+
+                var page = await index
+                    .GetPageAsync(pageIdOrPath, token)
+                    .ConfigureAwait(false)
+                    ?? throw new WikiPageNotFoundException($"Страница не найдена: {pageIdOrPath}");
+
+                call.TargetPath = page.Path;
+
+                // FR-21: права проверяются после нахождения страницы, но до выдачи содержимого.
+                if (!accessPolicy.CanRead(call.Subject, page.Namespace))
+                {
+                    throw new WikiAccessDeniedException(
+                        $"Нет доступа к разделу wiki: {page.Namespace}");
+                }
+
+                var section = MarkdownSections.Find(page.ContentMarkdown, sectionTitle)
+                    ?? throw new WikiSectionNotFoundException(
+                        $"Секция «{sectionTitle}» не найдена на странице {page.Path}.");
+
+                return new SectionResponseDto(
+                    page.PageId,
+                    page.Path,
+                    section.Title,
+                    section.ContentMarkdown,
+                    page.Revision);
+            },
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// Возвращает последние изменённые страницы, доступные субъекту (раздел 11.2, Could).
+    /// </summary>
+    /// <param name="take">Сколько записей вернуть; ограничивается сервером.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    /// <returns>Последние изменения, отсортированные по убыванию момента изменения.</returns>
+    /// <exception cref="WikiAccessDeniedException">Субъекту не доступен ни один раздел.</exception>
+    public Task<RecentChangesResponseDto> ListRecentChangesAsync(
+        int? take,
+        CancellationToken cancellationToken)
+    {
+        var parameters = new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["take"] = take,
+        };
+
+        return InvokeAuditedAsync(
+            WikiToolNames.RecentChanges,
+            parameters,
+            targetPath: null,
+            async (call, token) =>
+            {
+                var effectiveTake = Math.Clamp(
+                    take ?? options.MaxRecentChanges,
+                    1,
+                    options.MaxRecentChanges);
+
+                var allowedNamespaces = RequireAllowedNamespaces(call.Subject);
+
+                var pages = await index
+                    .ListRecentChangesAsync(allowedNamespaces, effectiveTake, token)
+                    .ConfigureAwait(false);
+
+                return new RecentChangesResponseDto(
+                    [.. pages.Select(page => new RecentChangeDto(
+                        page.PageId,
+                        page.Path,
+                        page.Title,
+                        page.Namespace,
+                        page.UpdatedAt,
+                        page.Revision))]);
+            },
+            cancellationToken);
+    }
+
+    /// <summary>
     /// Выполняет вызов инструмента, гарантируя запись аудита по любому исходу (FR-53).
     /// Ветвление «успех / отказ / не найдено / ошибка» живёт только здесь: иначе каждый
     /// новый инструмент рискует потерять след в аудите на одной из веток.
@@ -248,7 +358,7 @@ public sealed class WikiToolService(
     {
         // UC-4, FR-45: отказ по правам обязан отличаться в аудите от сбоя.
         WikiAccessDeniedException => AuditOutcome.Denied,
-        WikiPageNotFoundException => AuditOutcome.NotFound,
+        WikiPageNotFoundException or WikiSectionNotFoundException => AuditOutcome.NotFound,
         _ => AuditOutcome.Error,
     };
 

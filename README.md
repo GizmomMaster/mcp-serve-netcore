@@ -21,6 +21,8 @@ Central Wiki MCP Server ──► PostgreSQL (индекс + аудит)
 | `wiki_search` | Полнотекстовый поиск с фильтрами по разделу, тегам и дате |
 | `wiki_get_page` | Страница в Markdown, крупные — порциями |
 | `wiki_list_pages` | Навигация по структуре wiki |
+| `wiki_get_section` | Одна секция страницы по заголовку |
+| `wiki_recent_changes` | Последние изменённые страницы, доступные вызывающему |
 
 Плюс: аутентификация (JWT и API-key), ACL по разделам, аудит обращений,
 двухуровневый rate limiting, health-эндпоинты, фоновая синхронизация индекса
@@ -227,8 +229,8 @@ dotnet ef migrations add <Name> \
 
 ## Что не реализовано
 
-Требования уровня Could из BRD: `wiki_ask`, `wiki_get_section`,
-`wiki_recent_changes`, semantic/vector search. Точки расширения для них заложены
-(`IWikiIndex`, `IWikiSource`), но LLM-провайдер для `wiki_ask` спецификацией не определён.
+Из требований уровня Could в BRD не реализованы `wiki_ask` и semantic/vector
+search — оба требуют внешнего провайдера (LLM или embeddings), не определённого
+спецификацией. Точки расширения заложены (`IWikiIndex`, `IWikiSource`).
 
 Подробнее о соответствии требованиям — [`docs/traceability.md`](docs/traceability.md).
