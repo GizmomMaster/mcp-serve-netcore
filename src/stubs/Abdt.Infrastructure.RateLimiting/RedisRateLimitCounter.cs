@@ -1,5 +1,6 @@
 using System.Globalization;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using StackExchange.Redis;
 
 namespace Abdt.Infrastructure.RateLimiting;
@@ -10,9 +11,12 @@ namespace Abdt.Infrastructure.RateLimiting;
 /// </summary>
 internal sealed partial class RedisRateLimitCounter(
     IConnectionMultiplexer redis,
+    IOptions<RateLimitingOptions> options,
     TimeProvider timeProvider,
     ILogger<RedisRateLimitCounter> logger) : IRateLimitCounter
 {
+    private readonly string keyPrefix = options.Value.KeyPrefix;
+
     /// <summary>
     /// Атомарно оценивает нагрузку по текущему и предыдущему окну и инкрементирует счётчик.
     /// Предыдущее окно учитывается с весом, пропорциональным неистёкшей части.
@@ -102,10 +106,14 @@ internal sealed partial class RedisRateLimitCounter(
     private static RateLimitResult Allow(RateLimitPolicy policy) =>
         new(true, policy.PermitLimit, 0, TimeSpan.Zero);
 
-    private static RedisKey BuildKey(string partitionKey, long windowIndex) =>
+    /// <summary>
+    /// Ключ окна в Redis. Префикс берётся из настроек: несколько сервисов
+    /// могут делить один инстанс Redis, и их счётчики не должны пересекаться.
+    /// </summary>
+    private RedisKey BuildKey(string partitionKey, long windowIndex) =>
         (RedisKey)string.Create(
             CultureInfo.InvariantCulture,
-            $"rl:{partitionKey}:{windowIndex}");
+            $"{keyPrefix}:{partitionKey}:{windowIndex}");
 
     [LoggerMessage(
         EventId = 2000,

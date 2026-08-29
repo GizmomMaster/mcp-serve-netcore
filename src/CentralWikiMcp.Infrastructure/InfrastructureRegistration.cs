@@ -1,5 +1,6 @@
 using Abdt.Infrastructure.Configuration.Validation;
 using CentralWikiMcp.Domain.Abstractions;
+using CentralWikiMcp.Infrastructure.Health;
 using CentralWikiMcp.Infrastructure.Options;
 using CentralWikiMcp.Infrastructure.Persistence;
 using CentralWikiMcp.Infrastructure.Search;
@@ -11,6 +12,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Microsoft.Extensions.Options;
 
 namespace CentralWikiMcp.Infrastructure;
 
@@ -112,7 +114,7 @@ public static class InfrastructureRegistration
         await using var scope = services.CreateAsyncScope();
 
         var options = scope.ServiceProvider
-            .GetRequiredService<Microsoft.Extensions.Options.IOptions<WikiDatabaseOptions>>();
+            .GetRequiredService<IOptions<WikiDatabaseOptions>>();
 
         if (!options.Value.MigrateOnStartup)
         {

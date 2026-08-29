@@ -2,7 +2,7 @@ using CentralWikiMcp.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 
-namespace CentralWikiMcp.Infrastructure;
+namespace CentralWikiMcp.Infrastructure.Health;
 
 /// <summary>
 /// Проверка доступности PostgreSQL (FR-08).

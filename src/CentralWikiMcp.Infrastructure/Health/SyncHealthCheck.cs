@@ -5,7 +5,7 @@ using CentralWikiMcp.Infrastructure.Options;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Options;
 
-namespace CentralWikiMcp.Infrastructure;
+namespace CentralWikiMcp.Infrastructure.Health;
 
 /// <summary>
 /// Проверка состояния синхронизации (FR-34, FR-35).

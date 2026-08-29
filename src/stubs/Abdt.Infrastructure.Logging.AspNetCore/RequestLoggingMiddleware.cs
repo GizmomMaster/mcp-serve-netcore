@@ -58,11 +58,6 @@ internal sealed partial class RequestLoggingMiddleware(
             // известен только сейчас — на входе он ещё пуст (FR-51).
             var subject = context.User.Identity?.Name ?? "anonymous";
 
-            if (accessor.Current is { } current)
-            {
-                current.Subject = context.User.Identity?.Name;
-            }
-
             // Query string не логируем целиком: он может содержать ПД (FR-52).
             LogRequestCompleted(
                 logger,

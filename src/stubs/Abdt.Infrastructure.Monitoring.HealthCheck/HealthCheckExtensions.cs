@@ -93,9 +93,10 @@ public static class HealthCheckExtensions
                     status = entry.Value.Status.ToString(),
                     durationMs = entry.Value.Duration.TotalMilliseconds
                         .ToString("F1", CultureInfo.InvariantCulture),
-                    description = entry.Value.Description,
-
-                    // Исключение наружу не отдаём: может содержать строку подключения.
+                    // Описание упавшей проверки ASP.NET Core заполняет текстом исключения,
+                    // а он может содержать строку подключения или учётные данные. Эндпоинт
+                    // анонимный, поэтому наружу идёт только факт сбоя (NFR-35).
+                    description = entry.Value.Exception is null ? entry.Value.Description : null,
                     error = entry.Value.Exception is null ? null : "check failed",
                     data = entry.Value.Data.Count == 0 ? null : entry.Value.Data,
                 }),
