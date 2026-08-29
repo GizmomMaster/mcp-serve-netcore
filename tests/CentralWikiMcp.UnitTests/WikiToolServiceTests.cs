@@ -303,4 +303,115 @@ public sealed class WikiToolServiceTests
 
         Assert.Equal("internal/architecture", page.Path);
     }
+
+    private const string RunbookContent = """
+        # Развёртывание сервиса
+
+        Порядок выкладки.
+
+        ## Предусловия
+
+        Собран образ.
+
+        ## Откат
+
+        Вернуть предыдущий тег образа.
+        """;
+
+    [Fact]
+    public async Task Get_section_returns_matching_section_content()
+    {
+        var (service, index, _) = Create();
+        index.Add(CreatePage("runbooks/deploy", "runbooks", RunbookContent));
+
+        var section = await service.GetSectionAsync("runbooks/deploy", "откат", Token);
+
+        Assert.Equal("Откат", section.SectionTitle);
+        Assert.Contains("Вернуть предыдущий тег образа.", section.ContentMarkdown, StringComparison.Ordinal);
+        Assert.DoesNotContain("Собран образ.", section.ContentMarkdown, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Get_section_missing_heading_is_reported_as_not_found()
+    {
+        var (service, index, audit) = Create();
+        index.Add(CreatePage("runbooks/deploy", "runbooks", RunbookContent));
+
+        await Assert.ThrowsAsync<WikiSectionNotFoundException>(
+            () => service.GetSectionAsync("runbooks/deploy", "Несуществующая секция", Token));
+
+        Assert.Equal(AuditOutcome.NotFound, Assert.Single(audit.Events).Outcome);
+    }
+
+    [Fact]
+    public async Task Get_section_from_forbidden_namespace_is_denied()
+    {
+        var (service, index, audit) = Create();
+        index.Add(CreatePage("internal/architecture", "internal", RunbookContent));
+
+        await Assert.ThrowsAsync<WikiAccessDeniedException>(
+            () => service.GetSectionAsync("internal/architecture", "Откат", Token));
+
+        Assert.Equal(AuditOutcome.Denied, Assert.Single(audit.Events).Outcome);
+    }
+
+    [Fact]
+    public async Task Recent_changes_are_sorted_by_updated_at_descending()
+    {
+        var (service, index, _) = Create();
+        var older = CreatePage("runbooks/old", "runbooks") with
+        {
+            UpdatedAt = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero),
+        };
+        var newer = CreatePage("runbooks/new", "runbooks") with
+        {
+            UpdatedAt = new DateTimeOffset(2026, 8, 1, 0, 0, 0, TimeSpan.Zero),
+        };
+        index.Add(older);
+        index.Add(newer);
+
+        var response = await service.ListRecentChangesAsync(null, Token);
+
+        Assert.Equal(["runbooks/new", "runbooks/old"], response.Changes.Select(c => c.Path));
+    }
+
+    [Fact]
+    public async Task Recent_changes_clamps_take_to_server_maximum()
+    {
+        var (service, index, _) = Create(
+            toolOptions: new WikiToolOptions { MaxRecentChanges = 2 });
+
+        for (var i = 0; i < 5; i++)
+        {
+            index.Add(CreatePage($"runbooks/page-{i}", "runbooks"));
+        }
+
+        var response = await service.ListRecentChangesAsync(1000, Token);
+
+        Assert.Equal(2, response.Changes.Count);
+    }
+
+    [Fact]
+    public async Task Recent_changes_hides_forbidden_namespaces()
+    {
+        var (service, index, _) = Create();
+        index.Add(CreatePage("runbooks/deploy", "runbooks"));
+        index.Add(CreatePage("internal/architecture", "internal"));
+
+        var response = await service.ListRecentChangesAsync(null, Token);
+
+        var single = Assert.Single(response.Changes);
+        Assert.Equal("runbooks/deploy", single.Path);
+    }
+
+    [Fact]
+    public async Task Recent_changes_denied_when_no_namespace_is_allowed()
+    {
+        var (service, _, audit) = Create(WikiSubject.Anonymous);
+
+        await Assert.ThrowsAsync<WikiAccessDeniedException>(
+            () => service.ListRecentChangesAsync(null, Token));
+
+        Assert.Equal(AuditOutcome.Denied, Assert.Single(audit.Events).Outcome);
+    }
 }

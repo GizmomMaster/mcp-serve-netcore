@@ -53,3 +53,30 @@ public sealed class WikiPageNotFoundException : Exception
     {
     }
 }
+
+/// <summary>
+/// Запрошенная секция отсутствует на найденной странице (<c>wiki_get_section</c>, Could).
+/// </summary>
+public sealed class WikiSectionNotFoundException : Exception
+{
+    /// <summary>Создаёт исключение с сообщением по умолчанию.</summary>
+    public WikiSectionNotFoundException()
+        : base("Секция wiki не найдена.")
+    {
+    }
+
+    /// <summary>Создаёт исключение с указанным сообщением.</summary>
+    /// <param name="message">Сообщение.</param>
+    public WikiSectionNotFoundException(string message)
+        : base(message)
+    {
+    }
+
+    /// <summary>Создаёт исключение с сообщением и внутренней причиной.</summary>
+    /// <param name="message">Сообщение.</param>
+    /// <param name="innerException">Внутреннее исключение.</param>
+    public WikiSectionNotFoundException(string message, Exception innerException)
+        : base(message, innerException)
+    {
+    }
+}

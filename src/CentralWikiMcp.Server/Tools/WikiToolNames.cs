@@ -14,4 +14,10 @@ public static class WikiToolNames
 
     /// <summary>Список страниц и разделов.</summary>
     public const string ListPages = "wiki_list_pages";
+
+    /// <summary>Получение конкретной секции страницы.</summary>
+    public const string GetSection = "wiki_get_section";
+
+    /// <summary>Последние изменения в wiki.</summary>
+    public const string RecentChanges = "wiki_recent_changes";
 }

@@ -76,6 +76,42 @@ public sealed class WikiTools(WikiToolService service)
             () => service.ListPagesAsync(wikiNamespace, skip, take, cancellationToken));
 
     /// <summary>
+    /// Возвращает одну секцию страницы wiki по заголовку (раздел 11.2, Could).
+    /// </summary>
+    /// <param name="pageIdOrPath">Идентификатор страницы либо её путь вида <c>runbooks/deploy</c>.</param>
+    /// <param name="sectionTitle">Заголовок секции, например «Откат».</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    /// <returns>Заголовок и содержимое найденной секции.</returns>
+    [McpServerTool(Name = WikiToolNames.GetSection)]
+    [Description(
+        "Возвращает содержимое одной секции страницы wiki по заголовку (например, «Откат»). "
+        + "Используйте, когда нужна конкретная часть большой страницы, а не всё её содержимое.")]
+    public Task<SectionResponseDto> GetSectionAsync(
+        [Description("Идентификатор страницы или путь, например runbooks/deploy.")]
+        string pageIdOrPath,
+        [Description("Заголовок секции, например «Откат».")] string sectionTitle,
+        CancellationToken cancellationToken = default) =>
+        TranslateErrorsAsync(
+            () => service.GetSectionAsync(pageIdOrPath, sectionTitle, cancellationToken));
+
+    /// <summary>
+    /// Возвращает последние изменённые страницы wiki (раздел 11.2, Could).
+    /// </summary>
+    /// <param name="take">Сколько записей вернуть. Ограничивается сервером.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    /// <returns>Изменения, доступные вызывающему, отсортированные по убыванию времени.</returns>
+    [McpServerTool(Name = WikiToolNames.RecentChanges)]
+    [Description(
+        "Возвращает страницы wiki, доступные вызывающему, изменённые последними. "
+        + "Используйте, чтобы узнать, что недавно поменялось в wiki.")]
+    public Task<RecentChangesResponseDto> RecentChangesAsync(
+        [Description("Сколько записей вернуть (по умолчанию и максимум задаёт сервер).")]
+        int? take = null,
+        CancellationToken cancellationToken = default) =>
+        TranslateErrorsAsync(
+            () => service.ListRecentChangesAsync(take, cancellationToken));
+
+    /// <summary>
     /// Переводит доменные ошибки в <see cref="McpException"/>: её текст доходит
     /// до клиента, тогда как прочие исключения SDK скрывает за общей формулировкой.
     /// Модели нужна причина отказа, иначе она будет повторять безнадёжный вызов.
@@ -94,7 +130,9 @@ public sealed class WikiTools(WikiToolService service)
         {
             throw new McpException($"Некорректные параметры вызова: {ex.Message}", ex);
         }
-        catch (Exception ex) when (ex is WikiAccessDeniedException or WikiPageNotFoundException)
+        catch (Exception ex) when (ex is WikiAccessDeniedException
+            or WikiPageNotFoundException
+            or WikiSectionNotFoundException)
         {
             throw new McpException(ex.Message, ex);
         }

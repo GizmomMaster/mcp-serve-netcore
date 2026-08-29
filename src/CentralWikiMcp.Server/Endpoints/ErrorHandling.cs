@@ -50,7 +50,7 @@ public static class ErrorHandling
             WikiAccessDeniedException denied =>
                 (StatusCodes.Status403Forbidden, "forbidden", denied.Message),
 
-            WikiPageNotFoundException notFound =>
+            Exception notFound when notFound is WikiPageNotFoundException or WikiSectionNotFoundException =>
                 (StatusCodes.Status404NotFound, "not_found", notFound.Message),
 
             ValidationException validation =>

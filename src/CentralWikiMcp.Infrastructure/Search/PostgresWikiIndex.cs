@@ -138,6 +138,39 @@ internal sealed class PostgresWikiIndex(WikiDbContext dbContext, TimeProvider ti
     }
 
     /// <inheritdoc />
+    public async Task<IReadOnlyList<WikiPageSummary>> ListRecentChangesAsync(
+        IReadOnlyCollection<string>? allowedNamespaces,
+        int take,
+        CancellationToken cancellationToken)
+    {
+        if (allowedNamespaces is { Count: 0 })
+        {
+            return [];
+        }
+
+        var pages = dbContext.Pages.AsNoTracking();
+
+        if (allowedNamespaces is not null)
+        {
+            pages = pages.Where(page => allowedNamespaces.Contains(page.Namespace));
+        }
+
+        return await pages
+            .OrderByDescending(page => page.UpdatedAt)
+            .Take(take)
+            .Select(page => new WikiPageSummary(
+                page.PageId,
+                page.Path,
+                page.Title,
+                page.Namespace,
+                page.Tags,
+                page.UpdatedAt,
+                page.Revision))
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
     public async Task<int> UpsertAsync(
         IReadOnlyCollection<WikiPage> pages,
         CancellationToken cancellationToken)

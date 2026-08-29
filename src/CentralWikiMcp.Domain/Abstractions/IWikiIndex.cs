@@ -65,6 +65,18 @@ public interface IWikiIndex
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Возвращает последние изменённые страницы (<c>wiki_recent_changes</c>, Could).
+    /// </summary>
+    /// <param name="allowedNamespaces">Разделы, доступные субъекту; <c>null</c> — без ограничения.</param>
+    /// <param name="take">Сколько записей вернуть.</param>
+    /// <param name="cancellationToken">Токен отмены.</param>
+    /// <returns>Метаданные страниц, отсортированные по убыванию момента изменения.</returns>
+    Task<IReadOnlyList<WikiPageSummary>> ListRecentChangesAsync(
+        IReadOnlyCollection<string>? allowedNamespaces,
+        int take,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Возвращает ревизии страниц источника — для инкрементальной синхронизации (FR-36).
     /// </summary>
     /// <param name="sourceId">Идентификатор источника.</param>
