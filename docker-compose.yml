@@ -1,0 +1,63 @@
+# Локальный запуск сервиса целиком: PostgreSQL, Redis и MCP-сервер.
+# Секреты берутся из .env (см. .env.example) — в compose-файле их нет (NFR-35).
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: wikimcp
+      POSTGRES_DB: wikimcp
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD не задан, скопируйте .env.example в .env}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wikimcp -d wikimcp"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  wiki-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      # Секреты и строки подключения приходят из .env через префикс WIKIMCP_.
+      WIKIMCP_Database__ConnectionString: ${WIKIMCP_Database__ConnectionString}
+      WIKIMCP_RateLimiting__RedisConnectionString: ${WIKIMCP_RateLimiting__RedisConnectionString}
+      WIKIMCP_ApiKeyAuth__Clients__0__ClientId: ${WIKIMCP_ApiKeyAuth__Clients__0__ClientId}
+      WIKIMCP_ApiKeyAuth__Clients__0__Key: ${WIKIMCP_ApiKeyAuth__Clients__0__Key}
+      WIKIMCP_ApiKeyAuth__Clients__0__Groups__0: ${WIKIMCP_ApiKeyAuth__Clients__0__Groups__0}
+      WIKIMCP_ApiKeyAuth__Clients__1__ClientId: ${WIKIMCP_ApiKeyAuth__Clients__1__ClientId}
+      WIKIMCP_ApiKeyAuth__Clients__1__Key: ${WIKIMCP_ApiKeyAuth__Clients__1__Key}
+      WIKIMCP_ApiKeyAuth__Clients__1__Groups__0: ${WIKIMCP_ApiKeyAuth__Clients__1__Groups__0}
+      WIKIMCP_ApiKeyAuth__Clients__1__Groups__1: ${WIKIMCP_ApiKeyAuth__Clients__1__Groups__1}
+      WIKIMCP_Jwt__Issuer: ${WIKIMCP_Jwt__Issuer}
+      WIKIMCP_Jwt__Audience: ${WIKIMCP_Jwt__Audience}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT}
+    volumes:
+      # Источник wiki монтируется только на чтение (NFR-34, BR-02).
+      - ./wiki-content:/app/wiki-content:ro
+    ports:
+      - "8080:8080"
+
+volumes:
+  postgres-data:

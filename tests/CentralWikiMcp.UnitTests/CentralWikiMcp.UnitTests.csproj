@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+
+    <!-- .NET 10 SDK больше не поддерживает VSTest: xunit.v3 работает через Microsoft.Testing.Platform. -->
+    <TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
+    <UseVSTest>false</UseVSTest>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\CentralWikiMcp.Domain\CentralWikiMcp.Domain.csproj" />
+    <ProjectReference Include="..\..\src\CentralWikiMcp.Infrastructure\CentralWikiMcp.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\CentralWikiMcp.Server\CentralWikiMcp.Server.csproj" />
+    <ProjectReference Include="..\..\src\stubs\Abdt.Infrastructure.Logging.AspNetCore\Abdt.Infrastructure.Logging.AspNetCore.csproj" />
+    <ProjectReference Include="..\..\src\stubs\Abdt.Infrastructure.RateLimiting\Abdt.Infrastructure.RateLimiting.csproj" />
+  </ItemGroup>
+
+</Project>
